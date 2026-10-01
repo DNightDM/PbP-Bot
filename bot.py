@@ -19,13 +19,26 @@ OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 DATABASE = "notes.db"
 
-# Categories you requested
+# Categories
 CATEGORIES = [
+    "GT",
+    "SC",
+    "GH",
+    "FE",
     "Places",
     "NPCs",
     "General Knowledge",
     "Private Knowledge"
 ]
+
+# Emoji → Category quick-add map
+REACTION_MAP = {
+    "🦷": "GT",
+    "☀️": "SC",
+    "🌞": "SC",      # alternative sun
+    "🏹": "GH",
+    "✨": "FE",
+}
 
 # Timezone for the Sunday job (change if you want)
 TIMEZONE = pytz.timezone("Europe/Amsterdam")  # CEST-friendly default
@@ -35,6 +48,8 @@ TIMEZONE = pytz.timezone("Europe/Amsterdam")  # CEST-friendly default
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
+intents.reactions = True
+intents.members = True  # sometimes needed for reaction events
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
@@ -294,8 +309,8 @@ class AddNoteModal(discord.ui.Modal, title="Add to Notes"):
 
         self.category = discord.ui.TextInput(
             label="Category",
-            placeholder="Places / NPCs / General Knowledge / Private Knowledge",
-            default="General Knowledge",
+            placeholder="GT / SC / GH / FE (or any custom name)",
+            default="GT",
             max_length=50,
             required=True
         )
@@ -461,13 +476,21 @@ async def notes_help(interaction: discord.Interaction):
     help_text = """
 **How to use your PbP Notes Bot**
 
-**Adding notes**
-• Right-click any message → Apps → **Add to Notes**
-• Choose a category and (optionally) write a short comment
-• Categories: Places, NPCs, General Knowledge, Private Knowledge
+**Adding notes (two ways)**
+
+1. **Quick reaction (easiest)**
+   React to any message with:
+   • 🦷 → GT
+   • ☀️ → SC
+   • 🏹 → GH
+   • ✨ → FE
+
+2. **Right-click menu**
+   Right-click any message → Apps → **Add to Notes**
+   Then choose any category and (optionally) add a comment.
 
 **Commands**
-• `/notes_list` – Show recent notes (can filter by category)
+• `/notes_list` – Show recent notes
 • `/notes_search <query>` – Search your notes
 • `/notes_view <id>` – See the full note
 • `/notes_delete <id>` – Delete a note
@@ -484,6 +507,62 @@ Every Sunday the bot will:
 
 
 # -------------------- Bot Events --------------------
+
+@bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    """Quick-add notes by reacting with specific emojis."""
+    # Only the owner can use this
+    if payload.user_id != OWNER_ID:
+        return
+
+    # Ignore bot's own reactions
+    if payload.user_id == bot.user.id:
+        return
+
+    emoji = str(payload.emoji)
+    category = REACTION_MAP.get(emoji)
+    if not category:
+        return
+
+    # Fetch the message
+    channel = bot.get_channel(payload.channel_id)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(payload.channel_id)
+        except Exception:
+            return
+
+    try:
+        message = await channel.fetch_message(payload.message_id)
+    except Exception:
+        return
+
+    content = message.content or "*[No text content – maybe an embed or attachment]*"
+    if len(content) > 1800:
+        content = content[:1800] + "..."
+
+    note_id = await add_note(
+        category=category,
+        content=content,
+        comment=None,
+        author_name=str(message.author),
+        author_id=message.author.id,
+        message_link=message.jump_url,
+        channel_name=getattr(message.channel, "name", "DM"),
+        added_by=payload.user_id
+    )
+
+    # Send a quiet confirmation to the owner via DM
+    try:
+        owner = await bot.fetch_user(OWNER_ID)
+        await owner.send(
+            f"✅ Quick-added to **{category}** as Note #{note_id}\n"
+            f"From: {message.author} in #{getattr(message.channel, 'name', 'DM')}\n"
+            f"[Jump to message]({message.jump_url})"
+        )
+    except Exception:
+        pass  # If DMs are closed, just stay silent
+
 
 @bot.event
 async def on_ready():
