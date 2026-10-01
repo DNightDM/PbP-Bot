@@ -1,10 +1,14 @@
-# PbP Notes Bot (Personal)
+# PbP Notes Bot (Personal) – v2
 
-A private Discord bot that lets you right-click any message in your Play-by-Post games and save it into organized notes.
+A private Discord bot that lets you save messages from your Play-by-Post games into organized notes.
 
 **Features**
-- Right-click → Add to Notes
-- Categories: Places, NPCs, General Knowledge, Private Knowledge
+- **Quick reactions** (easiest method):
+  - 🦷 → GT
+  - ☀️ → SC
+  - 🏹 → GH
+  - ✨ → FE
+- Right-click → Add to Notes (with any custom category + comment)
 - Search, list, view, delete notes
 - Manual Markdown export
 - Automatic Claude summary + full export every Sunday (sent to you via DM)
